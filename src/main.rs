@@ -1,5 +1,15 @@
+use crossterm::cursor::MoveTo;
+use crossterm::style::{Color, SetForegroundColor};
+use crossterm::terminal::{Clear, ClearType};
+use crossterm::{style::Stylize, ExecutableCommand};
 use inquire::{Select, Text};
-use std::{cell::RefCell, collections::HashMap, fmt::Display};
+use std::borrow::BorrowMut;
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    fmt::Display,
+    io::{self, stdout, Write},
+};
 use uuid::Uuid;
 
 /// TaskRepository allows storing and retrieving tasks
@@ -62,14 +72,13 @@ impl TaskRepository for MapTaskRepository {
             .collect::<Vec<KeyedTask>>();
         v
     }
-
     fn remove_task(&self, t: &KeyedTask) {
         self.tm.borrow_mut().remove(&t.0);
     }
 }
 
 /// Models a priority of the task
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum Priority {
     High,
     Medium,
@@ -126,13 +135,31 @@ fn display_actions() -> Action {
     }
 }
 
+fn priority_to_color(p: &Priority) -> Color {
+    match p {
+        Priority::Low => Color::Green,
+        Priority::High => Color::Red,
+        Priority::Medium => Color::Yellow,
+    }
+}
+fn print_task(t: &Task) {
+    let _ = stdout().execute(SetForegroundColor(priority_to_color(&t.priority)));
+    print!(
+        "[{:>10}] {}\n",
+        t.priority,
+        t.name.to_string().with(Color::Magenta)
+    );
+}
+
 fn list_tasks(tr: &dyn TaskRepository) {
-    for uid in tr.ids() {
-        if let Some(t) = tr.get_task(uid) {
-            print!(" -> {:?} --- {}\n", t, uid);
-        } else {
-            print!("No tasks");
-        };
+    let _ = clear();
+    let mut all = tr.get_all();
+    all.sort_by_key(|kt| kt.1.priority.clone());
+    for t in all.iter() {
+        print_task(&t.1);
+    }
+    if all.is_empty() {
+        println!("{}", "No tasks".green());
     }
 }
 
@@ -187,7 +214,10 @@ fn execute_action(a: Action, tr: &dyn TaskRepository, state: State) -> State {
         }
     }
     match a {
-        Action::Quit => should_continue = false,
+        Action::Quit => {
+            let _ = clear();
+            should_continue = false
+        }
         Action::List => list_tasks(tr),
         Action::Add => add_task(tr),
         Action::Remove => {
@@ -218,17 +248,25 @@ fn load_tasks(tr: &dyn TaskRepository) {
     tr.add_task(o);
 }
 
-fn main() {
+fn clear() -> io::Result<()> {
+    stdout()
+        .execute(Clear(ClearType::All))?
+        .execute(MoveTo(0, 0))?;
+    Ok(())
+}
+fn main() -> io::Result<()> {
     let tr = MapTaskRepository::new();
     load_tasks(&tr);
-
     let mut curr_state = State {
         should_continue: true,
         task: None,
         action: None,
     };
+
+    clear()?;
     while curr_state.should_continue {
         let a = display_actions();
         curr_state = execute_action(a, &tr, curr_state);
     }
+    Ok(())
 }

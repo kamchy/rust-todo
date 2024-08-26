@@ -10,3 +10,5 @@ features = [ "v4",   "fast-rng",  ]
 [dependencies.inquire]
 version = "0.7.5"
 
+[dependencies.crossterm]
+version = "0.28.1"
