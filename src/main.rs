@@ -2,6 +2,7 @@ use crossterm::cursor::MoveTo;
 use crossterm::style::{Color, SetForegroundColor};
 use crossterm::terminal::{Clear, ClearType};
 use crossterm::{style::Stylize, ExecutableCommand};
+use inquire::list_option::ListOption;
 use inquire::{Select, Text};
 use std::borrow::BorrowMut;
 use std::{
@@ -142,13 +143,17 @@ fn priority_to_color(p: &Priority) -> Color {
         Priority::Medium => Color::Yellow,
     }
 }
-fn print_task(t: &Task) {
-    let _ = stdout().execute(SetForegroundColor(priority_to_color(&t.priority)));
-    print!(
+
+fn format_task(t: &Task) -> String {
+    format!(
         "[{:>10}] {}\n",
         t.priority,
         t.name.to_string().with(Color::Magenta)
-    );
+    )
+}
+fn print_task(t: &Task) {
+    let _ = stdout().execute(SetForegroundColor(priority_to_color(&t.priority)));
+    print!("{}", format_task(t));
 }
 
 fn list_tasks(tr: &dyn TaskRepository) {
@@ -181,13 +186,18 @@ fn add_task(tr: &dyn TaskRepository) {
         Err(_) => println!("Error reading task"),
     }
 }
+
+fn task_selection_formatter(lo: ListOption<&KeyedTask>) -> String {
+    format_task(&lo.value.1)
+}
+
 fn select_task(tr: &dyn TaskRepository) -> Option<KeyedTask> {
-    let ids: Vec<KeyedTask> = tr.get_all();
-    let selected = Select::new("Select one of tasks: ", ids).prompt();
-    match selected {
-        Ok(t) => Some(t),
-        Err(_) => None,
-    }
+    let task_repr: Vec<KeyedTask> = tr.get_all();
+    let selected = Select::new("Select one of tasks: ", task_repr)
+        .with_formatter(&task_selection_formatter)
+        .prompt();
+
+    selected.ok()
 }
 
 #[derive(Default)]
