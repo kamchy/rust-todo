@@ -12,3 +12,10 @@ version = "0.7.5"
 
 [dependencies.crossterm]
 version = "0.28.1"
+
+[dependencies.serde]
+version = "1.0.127"
+features = ["derive"]
+
+[dependencies.serde_json]
+version = "1.0.127"

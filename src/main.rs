@@ -4,12 +4,14 @@ use crossterm::terminal::{Clear, ClearType};
 use crossterm::{style::Stylize, ExecutableCommand};
 use inquire::list_option::ListOption;
 use inquire::{Select, Text};
-use std::borrow::BorrowMut;
+use serde::Deserialize;
+use serde::Serialize;
+use std::fs;
 use std::{
     cell::RefCell,
     collections::HashMap,
     fmt::Display,
-    io::{self, stdout, Write},
+    io::{self, stdout},
 };
 use uuid::Uuid;
 
@@ -79,7 +81,7 @@ impl TaskRepository for MapTaskRepository {
 }
 
 /// Models a priority of the task
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 enum Priority {
     High,
     Medium,
@@ -94,7 +96,7 @@ impl Priority {
     const VALUES: [Priority; 3] = [Priority::High, Priority::Medium, Priority::Low];
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 struct Task {
     name: String,
     priority: Priority,
@@ -245,17 +247,32 @@ fn execute_action(a: Action, tr: &dyn TaskRepository, state: State) -> State {
     }
 }
 
-fn load_tasks(tr: &dyn TaskRepository) {
-    let t = Task {
-        name: "Learn Rust".to_string(),
-        priority: Priority::High,
+const PATH: &str = "tasks.json";
+fn load_tasks(tr: &dyn TaskRepository) -> io::Result<()> {
+    if let Ok(contents) = fs::read_to_string(PATH) {
+        let tasks: Vec<Task> = serde_json::from_str(&contents)?;
+        for t in tasks {
+            tr.add_task(t.clone());
+        }
     };
-    let o = Task {
-        name: "Learn NeoVim".to_string(),
-        priority: Priority::Medium,
-    };
-    tr.add_task(t);
-    tr.add_task(o);
+    if tr.get_all().is_empty() {
+        let t = Task {
+            name: "Learn Rust".to_string(),
+            priority: Priority::High,
+        };
+        let o = Task {
+            name: "Learn NeoVim".to_string(),
+            priority: Priority::Medium,
+        };
+        tr.add_task(t);
+        tr.add_task(o);
+    }
+    Ok(())
+}
+
+fn save_tasks(tr: &dyn TaskRepository) -> io::Result<()> {
+    let v: Vec<Task> = tr.get_all().iter().map(|kt| kt.1.clone()).collect();
+    fs::write(PATH, serde_json::to_string(&v)?)
 }
 
 fn clear() -> io::Result<()> {
@@ -266,7 +283,7 @@ fn clear() -> io::Result<()> {
 }
 fn main() -> io::Result<()> {
     let tr = MapTaskRepository::new();
-    load_tasks(&tr);
+    load_tasks(&tr)?;
     let mut curr_state = State {
         should_continue: true,
         task: None,
@@ -278,5 +295,6 @@ fn main() -> io::Result<()> {
         let a = display_actions();
         curr_state = execute_action(a, &tr, curr_state);
     }
+    save_tasks(&tr)?;
     Ok(())
 }
